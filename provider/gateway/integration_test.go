@@ -4,9 +4,13 @@ package gateway
 import (
 	"context"
 	"errors"
-	ctypes "github.com/ovrclk/akash/provider/cluster/types"
 	"net/http/httptest"
 	"testing"
+
+	ctypes "github.com/ovrclk/akash/provider/cluster/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/ovrclk/akash/provider"
 	pcmock "github.com/ovrclk/akash/provider/cluster/mocks"
@@ -14,8 +18,6 @@ import (
 	pmmock "github.com/ovrclk/akash/provider/manifest/mocks"
 	pmock "github.com/ovrclk/akash/provider/mocks"
 	"github.com/ovrclk/akash/testutil"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 func Test_router_Status(t *testing.T) {
@@ -24,8 +26,9 @@ func Test_router_Status(t *testing.T) {
 		pclient, _, _ := createMocks()
 		pclient.On("Status", mock.Anything).Return(expected, nil)
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			result, err := client.Status(context.Background(), host)
+			client, err := NewClient(host, nil)
+			assert.NoError(t, err)
+			result, err := client.Status(context.Background())
 			assert.NoError(t, err)
 			assert.Equal(t, expected, result)
 		})
@@ -35,8 +38,8 @@ func Test_router_Status(t *testing.T) {
 		pclient, _, _ := createMocks()
 		pclient.On("Status", mock.Anything).Return(nil, errors.New("oops"))
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			_, err := client.Status(context.Background(), host)
+			client := NewClient(host, nil)
+			_, err := client.Status(context.Background())
 			assert.Error(t, err)
 		})
 		pclient.AssertExpectations(t)
@@ -52,8 +55,8 @@ func Test_router_Manifest(t *testing.T) {
 		pclient, pmclient, _ := createMocks()
 		pmclient.On("Submit", mock.Anything, req).Return(nil)
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			err := client.SubmitManifest(context.Background(), host, req)
+			client := NewClient(host, nil)
+			err := client.SubmitManifest(context.Background(), req)
 			assert.NoError(t, err)
 		})
 		pmclient.AssertExpectations(t)
@@ -66,8 +69,8 @@ func Test_router_Manifest(t *testing.T) {
 		pclient, pmclient, _ := createMocks()
 		pmclient.On("Submit", mock.Anything, req).Return(errors.New("ded"))
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			err := client.SubmitManifest(context.Background(), host, req)
+			client := NewClient(host, nil)
+			err := client.SubmitManifest(context.Background(), req)
 			assert.Error(t, err)
 		})
 		pmclient.AssertExpectations(t)
@@ -83,8 +86,8 @@ func Test_router_LeaseStatus(t *testing.T) {
 
 		pcclient.On("LeaseStatus", mock.Anything, id).Return(expected, nil)
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			status, err := client.LeaseStatus(context.Background(), host, id)
+			client := NewClient(host, nil)
+			status, err := client.LeaseStatus(context.Background(), id)
 			assert.Equal(t, expected, status)
 			assert.NoError(t, err)
 		})
@@ -97,8 +100,8 @@ func Test_router_LeaseStatus(t *testing.T) {
 
 		pcclient.On("LeaseStatus", mock.Anything, id).Return(nil, errors.New("ded"))
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			status, err := client.LeaseStatus(context.Background(), host, id)
+			client := NewClient(host, nil)
+			status, err := client.LeaseStatus(context.Background(), id)
 			assert.Nil(t, status)
 			assert.Error(t, err)
 		})
@@ -116,8 +119,8 @@ func Test_router_ServiceStatus(t *testing.T) {
 
 		pcclient.On("ServiceStatus", mock.Anything, id, service).Return(expected, nil)
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			status, err := client.ServiceStatus(context.Background(), host, id, service)
+			client := NewClient(host, nil)
+			status, err := client.ServiceStatus(context.Background(), id, service)
 			assert.NoError(t, err)
 			assert.Equal(t, expected, status)
 		})
@@ -131,8 +134,8 @@ func Test_router_ServiceStatus(t *testing.T) {
 
 		pcclient.On("ServiceStatus", mock.Anything, id, service).Return(nil, errors.New("ded"))
 		withServer(t, pclient, func(host string) {
-			client := NewClient()
-			status, err := client.ServiceStatus(context.Background(), host, id, service)
+			client := NewClient(host, nil)
+			status, err := client.ServiceStatus(context.Background(), id, service)
 			assert.Nil(t, status)
 			assert.Error(t, err)
 		})

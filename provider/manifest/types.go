@@ -11,6 +11,11 @@ type Status struct {
 }
 
 type SubmitRequest struct {
+	DSeq     uint64            `json:"dseq"`
+	Manifest manifest.Manifest `json:"manifest"`
+}
+
+type submitRequest struct {
 	Deployment dtypes.DeploymentID `json:"deployment"`
 	Manifest   manifest.Manifest   `json:"manifest"`
 }

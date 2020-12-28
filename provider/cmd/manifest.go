@@ -2,16 +2,15 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 
 	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/spf13/cobra"
+
 	"github.com/ovrclk/akash/provider/gateway"
 	"github.com/ovrclk/akash/provider/manifest"
 	"github.com/ovrclk/akash/sdl"
-	mcli "github.com/ovrclk/akash/x/market/client/cli"
-	mtypes "github.com/ovrclk/akash/x/market/types"
-	pmodule "github.com/ovrclk/akash/x/provider"
-	ptypes "github.com/ovrclk/akash/x/provider/types"
-	"github.com/spf13/cobra"
+	cutils "github.com/ovrclk/akash/x/cert/utils"
 )
 
 // SendManifestCmd looks up the Providers blockchain information,
@@ -25,13 +24,17 @@ func SendManifestCmd() *cobra.Command {
 			return doSendManifest(cmd, args[0])
 		},
 	}
-	mcli.AddBidIDFlags(cmd.Flags())
-	mcli.MarkReqBidIDFlags(cmd)
+
+	addCmdFlags(cmd)
+
 	return cmd
 }
 
 func doSendManifest(cmd *cobra.Command, sdlpath string) error {
-	cctx := client.GetClientContextFromCmd(cmd)
+	cctx, err := client.ReadTxCommandFlags(client.GetClientContextFromCmd(cmd), cmd.Flags())
+	if err != nil {
+		return err
+	}
 
 	sdl, err := sdl.ReadFile(sdlpath)
 	if err != nil {
@@ -43,28 +46,31 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		return err
 	}
 
-	bid, err := mcli.BidIDFromFlagsWithoutCtx(cmd.Flags())
+	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	lid := mtypes.MakeLeaseID(bid)
-
-	pclient := pmodule.AppModuleBasic{}.GetQueryClient(cctx)
-	res, err := pclient.Provider(context.Background(), &ptypes.QueryProviderRequest{Owner: lid.Provider})
+	dseq, err := dseqFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	provider := &res.Provider
-	gclient := gateway.NewClient()
+	cert, err := cutils.LoadCertificateFromFrom(cctx.HomeDir, cctx.FromAddress, cctx.Keyring)
+	if err != nil {
+		return err
+	}
+
+	gclient, err := gateway.NewClient(cctx, prov, []tls.Certificate{cert})
+	if err != nil {
+		return err
+	}
 
 	return showErrorToUser(gclient.SubmitManifest(
 		context.Background(),
-		provider.HostURI,
 		&manifest.SubmitRequest{
-			Deployment: lid.DeploymentID(),
-			Manifest:   mani,
+			DSeq:     dseq,
+			Manifest: mani,
 		},
 	))
 }

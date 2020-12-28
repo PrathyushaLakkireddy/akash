@@ -9,19 +9,25 @@ import (
 	"sync"
 	"time"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/websocket"
 	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/gorilla/mux"
+
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/ovrclk/akash/provider"
 	"github.com/ovrclk/akash/provider/cluster"
 	kubeClient "github.com/ovrclk/akash/provider/cluster/kube"
 	"github.com/ovrclk/akash/provider/manifest"
 	manifestValidation "github.com/ovrclk/akash/validation"
+	dtypes "github.com/ovrclk/akash/x/deployment/types"
 	mtypes "github.com/ovrclk/akash/x/market/types"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
+
+type CtxAuthKey string
 
 const (
 	contentTypeJSON = "application/json; charset=UTF-8"
@@ -51,23 +57,38 @@ type wsLogsConfig struct {
 	client    cluster.ReadClient
 }
 
-func newRouter(log log.Logger, pclient provider.Client) *mux.Router {
+func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client) *mux.Router {
 	router := mux.NewRouter()
 
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gcontext.Set(r, providerContextKey, addr)
+			next.ServeHTTP(w, r)
+		})
+	})
 	// GET /status
+	// provider status endpoint does not require authentication
 	router.HandleFunc("/status",
 		createStatusHandler(log, pclient)).
 		Methods("GET")
 
 	// PUT /deployment/<deployment-id>/manifest
+	// PUT /deployment/<dseq>/manifest
 	drouter := router.PathPrefix(deploymentPathPrefix).Subrouter()
-	drouter.Use(requireDeploymentID(log))
+	drouter.Use(
+		requireOwner(),
+		requireDeploymentID(log),
+	)
+
 	drouter.HandleFunc("/manifest",
 		createManifestHandler(log, pclient.Manifest())).
 		Methods("PUT")
 
 	lrouter := router.PathPrefix(leasePathPrefix).Subrouter()
-	lrouter.Use(requireLeaseID(log))
+	lrouter.Use(
+		requireOwner(),
+		requireLeaseID(log),
+	)
 
 	// GET /lease/<lease-id>/status
 	lrouter.HandleFunc("/status",
@@ -75,7 +96,10 @@ func newRouter(log log.Logger, pclient provider.Client) *mux.Router {
 		Methods("GET")
 
 	srouter := lrouter.PathPrefix("/service/{serviceName}").Subrouter()
-	srouter.Use(requireService())
+	srouter.Use(
+		requireOwner(),
+		requireService(),
+	)
 
 	// GET /lease/<lease-id>/service/<service-name>/status
 	srouter.HandleFunc("/status",
@@ -83,7 +107,12 @@ func newRouter(log log.Logger, pclient provider.Client) *mux.Router {
 		Methods("GET")
 
 	logRouter := srouter.PathPrefix("/logs").Subrouter()
-	logRouter.Use(requestLogParams())
+	logRouter.Use(
+		requireOwner(),
+		requireLeaseID(log),
+		requireService(),
+		requestLogParams(),
+	)
 
 	// GET /lease/<lease-id>/service/<service-name>/logs
 	logRouter.HandleFunc("",
@@ -118,12 +147,12 @@ func createManifestHandler(_ log.Logger, mclient manifest.Client) http.HandlerFu
 			return
 		}
 
-		if !requestDeploymentID(req).Equals(mreq.Deployment) {
-			http.Error(w, "deployment ID in request body does not match this resource", http.StatusBadRequest)
-			return
+		did := dtypes.DeploymentID{
+			Owner: requestOwner(req).String(),
+			DSeq:  mreq.DSeq,
 		}
 
-		if err := mclient.Submit(req.Context(), &mreq); err != nil {
+		if err := mclient.Submit(req.Context(), did, mreq.Manifest); err != nil {
 			if errors.Is(err, manifestValidation.ErrInvalidManifest) {
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return

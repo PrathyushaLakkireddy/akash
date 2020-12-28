@@ -2,18 +2,22 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
+
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 
 	cmdcommon "github.com/ovrclk/akash/cmd/common"
 	"github.com/ovrclk/akash/provider/gateway"
-	mcli "github.com/ovrclk/akash/x/market/client/cli"
+	cutils "github.com/ovrclk/akash/x/cert/utils"
 	mtypes "github.com/ovrclk/akash/x/market/types"
-	pmodule "github.com/ovrclk/akash/x/provider"
-	ptypes "github.com/ovrclk/akash/x/provider/types"
 )
 
-const FlagService = "service"
+const (
+	FlagService  = "service"
+	FlagProvider = "provider"
+	FlagDSeq     = "dseq"
+)
 
 func serviceStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -25,46 +29,50 @@ func serviceStatusCmd() *cobra.Command {
 		},
 	}
 
-	mcli.AddBidIDFlags(cmd.Flags())
-	mcli.MarkReqBidIDFlags(cmd)
-	cmd.Flags().String(FlagService, "", "name of service to query")
-	if err := cmd.MarkFlagRequired(FlagService); err != nil {
-		return nil
-	}
+	addServiceFlags(cmd)
 
 	return cmd
 }
 
 func doServiceStatus(cmd *cobra.Command) error {
-	cctx := client.GetClientContextFromCmd(cmd)
-
-	addr, err := mcli.ProviderFromFlagsWithoutCtx(cmd.Flags())
+	cctx, err := client.ReadTxCommandFlags(client.GetClientContextFromCmd(cmd), cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	var svcName string
-	if svcName, err = cmd.Flags().GetString(FlagService); err != nil {
-		return err
-	}
-
-	pclient := pmodule.AppModuleBasic{}.GetQueryClient(cctx)
-	res, err := pclient.Provider(context.Background(), &ptypes.QueryProviderRequest{Owner: addr.String()})
+	svcName, err := cmd.Flags().GetString(FlagService)
 	if err != nil {
 		return err
 	}
 
-	provider := &res.Provider
-	gclient := gateway.NewClient()
-
-	bid, err := mcli.BidIDFromFlagsWithoutCtx(cmd.Flags())
+	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	lid := mtypes.MakeLeaseID(bid)
+	dseq, gseq, oseq, err := parseLeaseFromFlags(cmd.Flags())
+	if err != nil {
+		return err
+	}
 
-	result, err := gclient.ServiceStatus(context.Background(), provider.HostURI, lid, svcName)
+	lid := mtypes.LeaseID{
+		DSeq:     dseq,
+		GSeq:     gseq,
+		OSeq:     oseq,
+		Provider: prov.String(),
+	}
+
+	cert, err := cutils.LoadCertificateFromFrom(cctx.HomeDir, cctx.FromAddress, cctx.Keyring)
+	if err != nil {
+		return err
+	}
+
+	gclient, err := gateway.NewClient(cctx, prov, []tls.Certificate{cert})
+	if err != nil {
+		return err
+	}
+
+	result, err := gclient.ServiceStatus(context.Background(), lid, svcName)
 	if err != nil {
 		return showErrorToUser(err)
 	}

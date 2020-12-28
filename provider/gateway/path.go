@@ -1,33 +1,36 @@
 package gateway
 
 import (
-	dquery "github.com/ovrclk/akash/x/deployment/query"
-	dtypes "github.com/ovrclk/akash/x/deployment/types"
-	mquery "github.com/ovrclk/akash/x/market/query"
+	"fmt"
+
 	mtypes "github.com/ovrclk/akash/x/market/types"
 )
 
 const (
-	deploymentPathPrefix = "/deployment/{owner}/{dseq}"
-	leasePathPrefix      = "/lease/{owner}/{dseq}/{gseq}/{oseq}/{provider}"
+	deploymentPathPrefix = "/deployment/{dseq}"
+	leasePathPrefix      = "/lease/{dseq}/{gseq}/{oseq}"
 )
 
 func statusPath() string {
 	return "status"
 }
 
-func submitManifestPath(id dtypes.DeploymentID) string {
-	return dquery.DeploymentPath(id) + "/manifest"
+func leasePath(id mtypes.LeaseID) string {
+	return fmt.Sprintf("lease/%d/%d/%d", id.DSeq, id.GSeq, id.OSeq)
+}
+
+func submitManifestPath(dseq uint64) string {
+	return fmt.Sprintf("deployment/%d/manifest", dseq)
 }
 
 func leaseStatusPath(id mtypes.LeaseID) string {
-	return mquery.LeasePath(id) + "/status"
+	return fmt.Sprintf("%s/status", leasePath(id))
 }
 
 func serviceStatusPath(id mtypes.LeaseID, service string) string {
-	return mquery.LeasePath(id) + "/service/" + service + "/status"
+	return fmt.Sprintf("%s/service/%s/status", leasePath(id), service)
 }
 
 func serviceLogsPath(id mtypes.LeaseID, service string) string {
-	return mquery.LeasePath(id) + "/service/" + service + "/logs"
+	return fmt.Sprintf("%s/service/%s/logs", leasePath(id), service)
 }

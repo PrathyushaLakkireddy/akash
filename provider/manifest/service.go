@@ -3,10 +3,13 @@ package manifest
 import (
 	"context"
 	"errors"
+
+	"github.com/ovrclk/akash/manifest"
 	"github.com/ovrclk/akash/validation"
 
-	lifecycle "github.com/boz/go-lifecycle"
+	"github.com/boz/go-lifecycle"
 	"github.com/caarlos0/env"
+
 	"github.com/ovrclk/akash/provider/event"
 	"github.com/ovrclk/akash/provider/session"
 	"github.com/ovrclk/akash/pubsub"
@@ -25,7 +28,7 @@ type StatusClient interface {
 
 // Handler is the interface that wraps HandleManifest method
 type Client interface {
-	Submit(context.Context, *SubmitRequest) error
+	Submit(context.Context, dtypes.DeploymentID, manifest.Manifest) error
 }
 
 // Service is the interface that includes StatusClient and Handler interfaces. It also wraps Done method
@@ -38,7 +41,6 @@ type Service interface {
 // NewHandler creates and returns new Service instance
 // Manage incoming leases and manifests and pair the two together to construct and emit a ManifestReceived event.
 func NewService(ctx context.Context, session session.Session, bus pubsub.Bus) (Service, error) {
-
 	session = session.ForModule("provider-manifest")
 
 	config := config{}
@@ -93,15 +95,23 @@ type service struct {
 }
 
 type manifestRequest struct {
-	value *SubmitRequest
+	value *submitRequest
 	ch    chan<- error
 	ctx   context.Context
 }
 
 // Send incoming manifest request.
-func (s *service) Submit(ctx context.Context, mreq *SubmitRequest) error {
+func (s *service) Submit(ctx context.Context, did dtypes.DeploymentID, mani manifest.Manifest) error {
 	ch := make(chan error, 1)
-	req := manifestRequest{value: mreq, ch: ch, ctx: ctx}
+	req := manifestRequest{
+		value: &submitRequest{
+			Deployment: did,
+			Manifest:   mani,
+		},
+		ch:  ch,
+		ctx: ctx,
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -203,7 +213,8 @@ loop:
 		case req := <-s.mreqch:
 			if err := validation.ValidateManifest(req.value.Manifest); err != nil {
 				s.session.Log().Error("manifest validation failed",
-					"err", err, "deployment", req.value.Deployment)
+					"err", err,
+					"deployment", req.value.Deployment)
 				req.ch <- err
 				break
 			}

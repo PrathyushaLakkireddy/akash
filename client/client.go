@@ -14,6 +14,7 @@ import (
 
 	"github.com/ovrclk/akash/client/broadcaster"
 	atypes "github.com/ovrclk/akash/x/audit/types"
+	ctypes "github.com/ovrclk/akash/x/cert/types"
 	dtypes "github.com/ovrclk/akash/x/deployment/types"
 	mtypes "github.com/ovrclk/akash/x/market/types"
 	ptypes "github.com/ovrclk/akash/x/provider/types"
@@ -30,6 +31,7 @@ type QueryClient interface {
 	mtypes.QueryClient
 	ptypes.QueryClient
 	atypes.QueryClient
+	ctypes.QueryClient
 
 	// TODO: implement with search parameters
 	ActiveLeasesForProvider(id sdk.AccAddress) (mtypes.Leases, error)
@@ -99,6 +101,7 @@ type qclient struct {
 	mclient mtypes.QueryClient
 	pclient ptypes.QueryClient
 	aclient atypes.QueryClient
+	cclient ctypes.QueryClient
 }
 
 // NewQueryClient creates new query client instance
@@ -107,12 +110,14 @@ func NewQueryClient(
 	mclient mtypes.QueryClient,
 	pclient ptypes.QueryClient,
 	aclient atypes.QueryClient,
+	cclient ctypes.QueryClient,
 ) QueryClient {
 	return &qclient{
 		dclient: dclient,
 		mclient: mclient,
 		pclient: pclient,
 		aclient: aclient,
+		cclient: cclient,
 	}
 }
 
@@ -223,4 +228,11 @@ func (c *qclient) AuditorAttributes(ctx context.Context, in *atypes.QueryAuditor
 		return &atypes.QueryProvidersResponse{}, ErrClientNotFound
 	}
 	return c.aclient.AuditorAttributes(ctx, in, opts...)
+}
+
+func (c *qclient) Certificates(ctx context.Context, in *ctypes.QueryCertificatesRequest, opts ...grpc.CallOption) (*ctypes.QueryCertificatesResponse, error) {
+	if c.cclient == nil {
+		return &ctypes.QueryCertificatesResponse{}, ErrClientNotFound
+	}
+	return c.cclient.Certificates(ctx, in, opts...)
 }

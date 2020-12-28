@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ovrclk/akash/client/broadcaster"
 	"github.com/ovrclk/akash/provider/bidengine"
+	cutils "github.com/ovrclk/akash/x/cert/utils"
 
 	cosmosclient "github.com/cosmos/cosmos-sdk/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -31,6 +33,7 @@ import (
 	"github.com/ovrclk/akash/provider/session"
 	"github.com/ovrclk/akash/pubsub"
 	amodule "github.com/ovrclk/akash/x/audit"
+	cmodule "github.com/ovrclk/akash/x/cert"
 	dmodule "github.com/ovrclk/akash/x/deployment"
 	mmodule "github.com/ovrclk/akash/x/market"
 	pmodule "github.com/ovrclk/akash/x/provider"
@@ -290,6 +293,11 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	gwaddr := viper.GetString(FlagGatewayListenAddress)
 
+	cert, err := cutils.LoadCertificateFromFrom(cctx.HomeDir, cctx.FromAddress, txFactory.Keybase())
+	if err != nil {
+		return err
+	}
+
 	log := openLogger()
 
 	broadcaster, err := broadcaster.NewSerialClient(log, cctx, txFactory, info)
@@ -309,6 +317,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			mmodule.AppModuleBasic{}.GetQueryClient(cctx),
 			pmodule.AppModuleBasic{}.GetQueryClient(cctx),
 			amodule.AppModuleBasic{}.GetQueryClient(cctx),
+			cmodule.AppModuleBasic{}.GetQueryClient(cctx),
 		),
 		broadcaster,
 	)
@@ -368,7 +377,15 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return group.Wait()
 	}
 
-	gateway := gateway.NewServer(ctx, log, service, gwaddr)
+	gateway := gateway.NewServer(
+		ctx,
+		log,
+		service,
+		cmodule.AppModuleBasic{}.GetQueryClient(cctx),
+		gwaddr,
+		cctx.FromAddress,
+		[]tls.Certificate{cert},
+	)
 
 	group.Go(func() error {
 		return events.Publish(ctx, cctx.Client, "provider-cli", bus)
@@ -379,7 +396,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return nil
 	})
 
-	group.Go(gateway.ListenAndServe)
+	group.Go(func() error {
+		// certificates are supplied via tls.Config
+		return gateway.ListenAndServeTLS("", "")
+	})
 
 	group.Go(func() error {
 		<-ctx.Done()
@@ -418,7 +438,8 @@ func showErrorToUser(err error) error {
 	// If the error has a complete message associated with it then show it
 	clientResponseError, ok := err.(gateway.ClientResponseError)
 	if ok && 0 != len(clientResponseError.Message) {
-		fmt.Fprintf(os.Stderr, "provider error messsage:\n%v\n", clientResponseError.Message)
+		_, _ = fmt.Fprintf(os.Stderr, "provider error messsage:\n%v\n", clientResponseError.Message)
+		err = nil
 	}
 
 	return err

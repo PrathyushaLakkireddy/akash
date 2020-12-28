@@ -63,6 +63,7 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
 	"github.com/ovrclk/akash/x/audit"
+	"github.com/ovrclk/akash/x/cert"
 	"github.com/ovrclk/akash/x/deployment"
 	"github.com/ovrclk/akash/x/market"
 	"github.com/ovrclk/akash/x/provider"
@@ -139,6 +140,7 @@ type AkashApp struct {
 		market     market.Keeper
 		provider   provider.Keeper
 		audit      audit.Keeper
+		cert       cert.Keeper
 	}
 
 	mm *module.Manager

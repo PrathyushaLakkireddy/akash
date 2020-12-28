@@ -35,15 +35,15 @@ deployment-create:
 
 .PHONY: deployment-update
 deployment-update:
-	$(AKASHCTL) tx deployment update "$(KEY_OPTS) "$(SDL_PATH)" -y \
-		--dseq "$(DSEQ)" 			   \
+	$(AKASHCTL) tx deployment update "$(KEY_OPTS)" "$(SDL_PATH)" -y \
+		--dseq "$(DSEQ)" \
 		--from "$(KEY_NAME)"
 
 .PHONY: deployment-close
 deployment-close:
 	$(AKASHCTL) tx deployment close "$(KEY_OPTS)" "$(CHAIN_OPTS)" \
-		--owner "$(MAIN_ADDR)"   \
-		--dseq "$(DSEQ)" 			   \
+		--owner "$(MAIN_ADDR)" \
+		--dseq "$(DSEQ)"       \
 		--from "$(KEY_NAME)" -y
 
 .PHONY: order-close
@@ -136,3 +136,14 @@ query-lease:
 .PHONY: query-leases
 query-leases:
 	$(AKASHCTL) query market lease list
+
+.PHONY: query-certificates
+query-certificates:
+	$(AKASHCTL) query cert list
+
+.PHONY: send-manifest
+send-manifest:
+	$(AKASHCTL) "$(KEY_OPTS)" provider send-manifest "$(SDL_PATH)" \
+		--dseq "$(DSEQ)" \
+		--from "$(KEY_NAME)" \
+		--provider  "$(PROVIDER_ADDRESS)"

@@ -563,5 +563,7 @@ func initParamsKeeper(appCodec codec.BinaryMarshaler, legacyAmino *codec.LegacyA
 	paramsKeeper.Subspace(crisistypes.ModuleName)
 	paramsKeeper.Subspace(ibctransfertypes.ModuleName)
 
+	paramsKeeper = akashSubspaces(paramsKeeper)
+
 	return paramsKeeper
 }

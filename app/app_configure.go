@@ -5,6 +5,7 @@ package app
 import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 
+	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	"github.com/ovrclk/akash/x/audit"
 	"github.com/ovrclk/akash/x/deployment"
 	"github.com/ovrclk/akash/x/market"
@@ -33,6 +34,7 @@ func (app *AkashApp) setAkashKeepers() {
 	app.keeper.deployment = deployment.NewKeeper(
 		app.appCodec,
 		app.keys[deployment.StoreKey],
+		app.GetSubspace(deployment.ModuleName),
 	)
 
 	app.keeper.market = market.NewKeeper(
@@ -119,4 +121,9 @@ func (app *AkashApp) akashSimModules() []module.AppModuleSimulation {
 			app.keeper.bank,
 		),
 	}
+}
+
+func akashSubspaces(paramsKeeper paramskeeper.Keeper) paramskeeper.Keeper {
+	paramsKeeper.Subspace(deployment.ModuleName)
+	return paramsKeeper
 }
